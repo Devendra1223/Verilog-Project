@@ -1,0 +1,89 @@
+// Verilog FSM Example: Vending Machine (Mealy Machine)
+// This module models a vending machine that accepts cash, dispenses items, and gives change.
+
+module vending_machine_meal (
+    input clk,                  // Clock signal
+    input reset,                // Reset signal
+    input [7:0] insert_cash,    // Cash inserted by user
+    input [7:0] item_price,     // Price of the selected item
+    input item_available,       // Item availability flag
+    input select_item,          // Item selection input
+    input cancel,               // Transaction cancel input
+    output reg [7:0] dispensed_item, // Dispensed item value
+    output reg [7:0] dispensed_change, // Change to be dispensed
+    output reg error            // Error flag
+);
+
+    // State Definitions
+    parameter READY                = 3'b000,
+              CASH_COLLECTED       = 3'b001,
+              DISPENSE_CHANGE      = 3'b010,
+              DISPENSE_ITEM        = 3'b011,
+              TRANSACTION_CANCELLED = 3'b100;
+
+    // State registers
+    reg [2:0] current_state, next_state;
+
+    // Sequential logic to update the state
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            current_state <= READY;
+        end else begin
+            current_state <= next_state;
+        end
+    end
+
+    // Combinational logic for state transitions and outputs
+    always @* begin
+        // Default assignments
+        next_state = current_state;
+        dispensed_item = 8'b0;
+        dispensed_change = 8'b0;
+        error = 1'b0;
+
+        case (current_state)
+            READY: begin
+                if (insert_cash > 0) begin
+                    next_state = CASH_COLLECTED;
+                end
+            end
+
+            CASH_COLLECTED: begin
+                if (cancel) begin
+                    next_state = TRANSACTION_CANCELLED;
+                end else if (select_item) begin
+                    if (!item_available) begin
+                        error = 1'b1;
+                        next_state = TRANSACTION_CANCELLED;
+                    end else if (insert_cash < item_price) begin
+                        error = 1'b1;
+                        next_state = TRANSACTION_CANCELLED;
+                    end else if (insert_cash == item_price) begin
+                        next_state = DISPENSE_ITEM;
+                    end else begin // insert_cash > item_price
+                        next_state = DISPENSE_CHANGE;
+                    end
+                end
+            end
+
+            DISPENSE_CHANGE: begin
+                dispensed_change = insert_cash - item_price;
+                next_state = DISPENSE_ITEM;
+            end
+
+            DISPENSE_ITEM: begin
+                dispensed_item = 8'd1; // Dispense a dummy item
+                next_state = READY;
+            end
+
+            TRANSACTION_CANCELLED: begin
+                dispensed_change = insert_cash; // Return the inserted cash
+                next_state = READY;
+            end
+
+            default: begin
+                next_state = READY;
+            end
+        endcase
+    end
+endmodule
