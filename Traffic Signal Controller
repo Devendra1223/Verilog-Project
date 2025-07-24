@@ -1,0 +1,103 @@
+// Verilog FSM Example: Traffic Light Controller (Moore Machine)
+// This module models a traffic light controller for a highway and a country road.
+
+// Define delays in clock cycles
+`define Y2RDELAY 3   // Yellow to Red delay
+`define R2GDELAY 2   // Red to Green delay
+
+module sig_control (
+    output reg [1:0] hwy, cntry,  // 2-bit signal states (0=RED, 1=YELLOW, 2=GREEN)
+    input X,                     // Car presence sensor on country road
+    input clock,
+    input clear                  // Reset
+);
+
+    // Light State Definitions
+    parameter RED    = 2'd0,
+              YELLOW = 2'd1,
+              GREEN  = 2'd2;
+
+    // FSM State Encoding
+    parameter S0 = 3'd0, // HWY: Green,  CNTRY: Red
+              S1 = 3'd1, // HWY: Yellow, CNTRY: Red
+              S2 = 3'd2, // HWY: Red,    CNTRY: Red (All Red Delay)
+              S3 = 3'd3, // HWY: Red,    CNTRY: Green
+              S4 = 3'd4; // HWY: Red,    CNTRY: Yellow
+
+    // State registers
+    reg [2:0] state, next_state;
+    reg [3:0] timer; // Timer for delays
+
+    // Sequential logic to update the state
+    always @(posedge clock or posedge clear) begin
+        if (clear)
+            state <= S0;
+        else
+            state <= next_state;
+    end
+
+    // Combinational Output logic (Moore Machine: output depends only on state)
+    always @(state) begin
+        case (state)
+            S0: begin
+                hwy = GREEN;
+                cntry = RED;
+            end
+            S1: begin
+                hwy = YELLOW;
+                cntry = RED;
+            end
+            S2: begin
+                hwy = RED;
+                cntry = RED;
+            end
+            S3: begin
+                hwy = RED;
+                cntry = GREEN;
+            end
+            S4: begin
+                hwy = RED;
+                cntry = YELLOW;
+            end
+            default: begin
+                hwy = GREEN;
+                cntry = RED;
+            end
+        endcase
+    end
+
+    // Logic for delay timer (synthesizable)
+    always @(posedge clock or posedge clear) begin
+        if (clear) begin
+            timer <= 0;
+        end else begin
+            case(state)
+                S1, S4: begin // States with Yellow to Red Delay
+                    if (timer < `Y2RDELAY)
+                        timer <= timer + 1;
+                    else
+                        timer <= 0;
+                end
+                S2: begin // State with Red to Green Delay
+                    if (timer < `R2GDELAY)
+                        timer <= timer + 1;
+                    else
+                        timer <= 0;
+                end
+                default: timer <= 0;
+            endcase
+        end
+    end
+    
+    // Combinational Next State Logic
+    always @* begin
+        next_state = state; // Default to stay in the same state
+        case (state)
+            S0: if (X) next_state = S1;
+            S1: if (timer == `Y2RDELAY) next_state = S2;
+            S2: if (timer == `R2GDELAY) next_state = S3;
+            S3: if (!X) next_state = S4;
+            S4: if (timer == `Y2RDELAY) next_state = S0;
+        endcase
+    end
+endmodule
